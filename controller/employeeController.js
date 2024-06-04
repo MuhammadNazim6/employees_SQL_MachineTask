@@ -1,4 +1,3 @@
-import employeeModel from "../models/employeeModel.js";
 
 const getAllEmployees = async (req, res) => {
   try {
