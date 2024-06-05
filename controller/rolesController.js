@@ -13,8 +13,7 @@ const createRole = async (req, res) => {
       });
     }
 
-    const insertQuery =
-      "INSERT INTO roles (role_name) VALUES ($1) RETURNING id";
+    const insertQuery = "INSERT INTO roles (role_name) VALUES ($1) RETURNING id";
     const insertResult = await pgClient.query(insertQuery, [role]);
 
     if (insertResult.rowCount > 0) {
@@ -139,7 +138,7 @@ const deleteRole = async (req, res) => {
         message: "Role does not exist",
       });
     }
-    
+
     const deleteQuery = "DELETE FROM roles WHERE id = $1"
     const deleted = await pgClient.query(deleteQuery,[id])
     if (deleted.rowCount > 0) {

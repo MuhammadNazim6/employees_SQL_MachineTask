@@ -1,6 +1,7 @@
 import express from "express";
 import employeesRoute from "./routes/employeesRoute.js";
 import rolesRoute from "./routes/rolesRoute.js";
+import commonRoute from "./routes/commonRoute.js";
 
 const port = process.env.PORT;
 
@@ -18,6 +19,10 @@ app.use(
 app.use(
   "/api/roles",
   rolesRoute
+);
+app.use(
+  "/api/employee-role",
+  commonRoute
 );
 
 app.listen(port, () => {

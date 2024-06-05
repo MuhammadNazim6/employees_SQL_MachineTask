@@ -1,66 +1,28 @@
-
-const getAllEmployees = async (req, res) => {
-  try {
-    const employees = await employeeModel.find().populate("roleId");
-    if (employees) {
-      res.status(200).json({
-        success: true,
-        data: employees,
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        message: "Unable to fetch employees",
-      });
-    }
-  } catch (error) {
-    console.log(error.message);
-    return;
-  }
-};
-
-const getEmployee = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const employee = await employeeModel.findById(id).populate("roleId");
-
-    if (employee) {
-      res.status(200).json({
-        success: true,
-        data: employee,
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        message: "Employee with this id doest not exist",
-      });
-    }
-  } catch (error) {
-    console.log(error.message);
-    return;
-  }
-};
+import pgClient from "../db.js";
 
 const createEmployee = async (req, res) => {
   try {
-    const { name, roleId, empcode, mail_id, phone_number } = req.body;
-    const employWithSameMail = await employeeModel.findOne({ mail_id });
-    if (employWithSameMail) {
+    const { name, role_id, empcode, mail_id, phone_number } = req.body;
+    const sameMailQuery = "SELECT * FROM employees WHERE mail_id = $1";
+    const employWithSameMail = await pgClient.query(sameMailQuery, [mail_id]);
+    if (employWithSameMail.rowCount > 0) {
       res.status(400).json({
         success: false,
         message: "Employ with same mail exists",
       });
       return;
     }
-    const newEmployee = new employeeModel({
+
+    const insertQuery =
+      "INSERT INTO employees (name,role_id,empcode,mail_id,phone_number) VALUES ($1,$2,$3,$4,$5)";
+    const newEmployee = await pgClient.query(insertQuery, [
       name,
-      roleId,
+      role_id,
       empcode,
       mail_id,
       phone_number,
-    });
-    const saved = await newEmployee.save();
-    if (saved) {
+    ]);
+    if (newEmployee.rowCount > 0) {
       res.status(200).json({
         success: true,
         message: "New employee has been added",
@@ -72,8 +34,63 @@ const createEmployee = async (req, res) => {
       });
     }
   } catch (error) {
-    console.log(error.message);
-    return;
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while processing the request",
+    });
+  }
+};
+
+const getAllEmployees = async (req, res) => {
+  try {
+    const getAllQuery =
+      "SELECT e.*, r.role_name FROM employees e INNER JOIN roles r ON e.role_id = r.id";
+    const employees = await pgClient.query(getAllQuery);
+    if (employees.rowCount > 0) {
+      res.status(200).json({
+        success: true,
+        data: employees.rows,
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: "Unable to fetch employees",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while processing the request",
+    });
+  }
+};
+
+const getEmployee = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const getQuery =
+      "SELECT * FROM employees WHERE id = $1";
+    const employee = await pgClient.query(getQuery, [id]);
+
+    if (employee.rowCount > 0) {
+      res.status(200).json({
+        success: true,
+        data: employee.rows[0],
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: "Employee with this id doest not exist",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while processing the request",
+    });
   }
 };
 
@@ -81,8 +98,9 @@ const updateEmployee = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, roleId, empcode, mail_id, phone_number } = req.body;
-    const employee = await employeeModel.findById(id);
-    if (!employee) {
+    const checkEmployeeQuery = "SELECT * FROM employees WHERE id = $1";
+    const employee = await pgClient.query(checkEmployeeQuery, [id]);
+    if (employee.rowCount === 0) {
       res.status(400).json({
         success: false,
         message: "This employee do not exist",
@@ -90,21 +108,25 @@ const updateEmployee = async (req, res) => {
       return;
     }
 
-    const updated = await employeeModel.findOneAndUpdate(
-      { _id: id },
-      {
-        $set: {
-          name: name || employee.name,
-          roleId: roleId || employee.roleId,
-          empcode: empcode || employee.empcode,
-          mail_id: mail_id || employee.mail_id,
-          phone_number: phone_number || employee.phone_number,
-        },
-      },
-      { new: true }
-    );
-    console.log("UPDATED:", updated);
-    if (updated) {
+    const updateQuery = `UPDATE employees SET
+    name = COALESCE($1,name),
+    role_id = COALESCE($2,role_id),
+    empcode =  COALESCE($3,empcode),
+    mail_id = COALESCE($4,mail_id),
+    phone_number = COALESCE($5,phone_number)
+    WHERE id = $6
+    RETURNING *;
+    `;
+    const updated = await pgClient.query(updateQuery, [
+      name,
+      roleId,
+      empcode,
+      mail_id,
+      phone_number,
+      id,
+    ]);
+
+    if (updated.rowCount > 0) {
       res.status(200).json({
         success: true,
         message: "The employee have been updated",
@@ -116,16 +138,30 @@ const updateEmployee = async (req, res) => {
       });
     }
   } catch (error) {
-    console.log(error.message);
-    return;
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while processing the request",
+    });
   }
 };
 
 const deleteEmployee = async (req, res) => {
   try {
     const { id } = req.params;
-    const deleted = await employeeModel.deleteOne({ _id: id });
-    if (deleted.deletedCount) {
+    const checkIfEmployeeQuery = "SELECT * FROM employees WHERE id = $1";
+    const checkIfEmployee = await pgClient.query(checkIfEmployeeQuery, [id]);
+
+    if (checkIfEmployee.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee does not exist",
+      });
+    }
+
+    const deleteQuery = "DELETE FROM roles WHERE id = $1";
+    const deleted = await pgClient.query(deleteQuery, [id]);
+    if (deleted.rowCount > 0) {
       res.status(200).json({
         success: true,
         message: `Employee has been deleted`,
@@ -137,8 +173,39 @@ const deleteEmployee = async (req, res) => {
       });
     }
   } catch (error) {
-    console.log(error.message);
-    return;
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while processing the request",
+    });
+  }
+};
+
+
+const getEmployeeAndRoles = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const getQuery =
+      "SELECT e.*, r.role_name FROM employees e INNER JOIN roles r ON e.role_id = r.id WHERE e.id = $1";
+    const employee = await pgClient.query(getQuery, [id]);
+
+    if (employee.rowCount > 0) {
+      res.status(200).json({
+        success: true,
+        data: employee.rows[0],
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: "Employee with this id doest not exist",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while processing the request",
+    });
   }
 };
 
@@ -148,4 +215,5 @@ export {
   createEmployee,
   updateEmployee,
   deleteEmployee,
+  getEmployeeAndRoles,
 };
